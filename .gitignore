@@ -1,0 +1,48 @@
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+*.egg-info/
+
+# Env & secrets
+.env
+.env.local
+.env.production
+.env.*.local
+.env.sentry-build-plugin
+*.pem
+
+# Supabase local
+supabase/.temp/
+
+# Tests / coverage
+coverage/
+htmlcov/
+playwright-report/
+test-results/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local uploaded files (dev storage)
+backend/.storage/

@@ -1,0 +1,17 @@
+{
+  "name": "careerpilot-india",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "frontend",
+    "e2e"
+  ],
+  "scripts": {
+    "dev": "npm --workspace frontend run dev",
+    "build": "npm --workspace frontend run build",
+    "typecheck": "npm --workspace frontend run typecheck",
+    "lint": "npm --workspace frontend run lint",
+    "test": "npm --workspace frontend run test",
+    "test:e2e": "npm --workspace e2e run test"
+  }
+}
