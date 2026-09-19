@@ -23,7 +23,7 @@ Verification: All endpoints/auth/limits below were checked against the providers
 | Email | Resend (backend only) | Official SDK |
 | Error monitoring | Sentry (backend + frontend) | Separate DSNs/projects where appropriate |
 | DNS/CDN | Cloudflare | Optional until deployment; no early complexity |
-| Hosting | Vercel (frontend), Railway (backend) | Fixed per stack |
+| Hosting | Frontend: Vercel (optional) or any Next.js host · Backend: any Python host (Railway, Render, Fly, etc.) | Choose at deployment time; local development requires no hosting |
 | CI/CD | GitHub Actions | lint/typecheck/test/build + scheduled ingestion trigger |
 | PDF/DOCX | `pypdf`, `pdfplumber`, `python-docx` | See §16 (licenses/security verified) |
 | HTML sanitization | `nh3` (ammonia bindings) | Allowlist-based; job-provider HTML is untrusted |
@@ -36,13 +36,13 @@ Deliberately excluded (no Redis, Celery, Kafka, RabbitMQ, Elasticsearch, vector 
 
 ## 2. External Service List (all integrations used or planned)
 
-Supabase · Greenhouse · Ashby · OpenRouter · OmniRoute (dev) · Resend · Sentry · Vercel · Railway · Cloudflare (deploy-time) · GitHub Actions. Full per-service cards in §11.
+Supabase · Greenhouse · Ashby · OpenRouter · OmniRoute (dev) · Resend · Sentry · Vercel (optional, frontend) · Any Python host for backend · Cloudflare (optional, deploy-time) · GitHub Actions. Full per-service cards in §11.
 
 ---
 
 ## 3–4. API List & Endpoint List (FastAPI backend)
 
-Base path: `https://<railway-host>/api/v1`. FastAPI auto-serves `/docs` and `/openapi.json` (no duplicate hand-written API docs). The frontend calls only these endpoints; no direct DB access from the browser.
+Base path: `https://<backend-host>/api/v1` (e.g. `http://localhost:8000` locally). FastAPI auto-serves `/docs` and `/openapi.json` (no duplicate hand-written API docs). The frontend calls only these endpoints; no direct DB access from the browser.
 
 | Group | Endpoints |
 |---|---|
@@ -152,7 +152,7 @@ SIGNED_URL_TTL_SECONDS=
 | AI | OpenRouter (real provider, low-cost models; `AI_MODEL` per dev) | OpenRouter; model set via env; budget limits |
 | Email | Resend (test domain `onboarding@resend.dev` or sandbox) | Verified sending domain, `RESEND_FROM_EMAIL` |
 | Error monitoring | Sentry optional / `traces_sample_rate=0` locally | Sentry on; PII collection off; no secrets/resumes |
-| Secrets | Local `.env` / `.env.local` (gitignored) | Vercel env vars, Railway env vars, CI secrets |
+| Secrets | Local `.env` / `.env.local` (gitignored) | Host env vars (e.g. Vercel for frontend, Railway/Render/etc. for backend), CI secrets |
 | URL | `http://localhost:3000` (web) / `http://localhost:8000` (api) | `NEXT_PUBLIC_APP_URL`, Railway domain, `WEBAPP_URL` |
 
 ---
@@ -288,20 +288,18 @@ Reasoning: `frontend/` + `backend/` + `supabase/` matches the master prompt's re
 - **DEVELOPMENT/PRODUCTION:** optional in dev (`traces` off); enabled in production.
 - **SECURITY NOTES:** `send_default_pii=False`; never capture passwords, API/service-role keys, full resumes, or sensitive application answers; Sentry auto-filters keys named `auth`/`password`.
 
-### ✦ Vercel (Frontend hosting)
-- **PURPOSE:** Next.js hosting/deploy
+### ✦ Vercel (Frontend hosting — optional)
+- **PURPOSE:** Next.js hosting/deploy (optional — any Next.js-compatible host works)
 - **OFFICIAL WEBSITE/DOCS:** https://vercel.com / https://vercel.com/docs
-- **CREDENTIALS:** none in repo; GitHub integration + env vars in project settings.
+- **CREDENTIALS:** none in repo; GitHub integration + env vars in project settings if used.
 - **FREE/PAID:** Hobby free → Pro.
-- **SECURITY NOTES:** `NEXT_PUBLIC_*` inlined at build → only genuinely public values use the prefix; all secrets stay server-side (backend env on Railway).
+- **SECURITY NOTES:** `NEXT_PUBLIC_*` inlined at build → only genuinely public values use the prefix; all secrets stay server-side (backend env on whichever host is chosen).
 
-### ✦ Railway (Backend hosting)
-- **PURPOSE:** FastAPI hosting
-- **OFFICIAL WEBSITE/DOCS:** https://railway.com / https://docs.railway.com (FastAPI guide: /guides/fastapi)
-- **CONFIG:** `backend/Dockerfile` (preferred) or Nixpacks; start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`; Railway injects `$PORT`. Note: Nixpacks is in maintenance mode (Railpack recommended); Dockerfile keeps us independent of builder changes.
-- **CREDENTIALS:** env vars set in Railway service (secrets) — no repo copy.
-- **FREE/PAID:** trial credit; ≈$5–20/mo at launch scale.
-- **SECURITY NOTES:** only the public HTTP service is exposed; secrets live in Railway env. Ingestion scheduled via GitHub Actions (not extra Railway infra).
+### ✦ Backend hosting (FastAPI — choose at deploy time)
+- **PURPOSE:** FastAPI hosting — local development uses `uvicorn app.main:app --reload`; production can be any suitable Python host (Railway, Render, Fly, etc.)
+- **REFERENCE CONFIG:** start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (host injects `$PORT`). Use `backend/requirements.txt` or `backend/pyproject.toml` for dependencies. A `Dockerfile` is not required for local development.
+- **CREDENTIALS:** env vars set in the chosen host's dashboard (secrets) — no repo copy.
+- **SECURITY NOTES:** only the public HTTP service is exposed; secrets live in host env. Ingestion scheduled via GitHub Actions (not extra host infra).
 
 ### ✦ Cloudflare (DNS/CDN — deploy-time)
 - **PURPOSE:** domain DNS (`domain → Vercel`, `api.domain → Railway`), optional WAF/CDN
@@ -318,34 +316,36 @@ Reasoning: `frontend/` + `backend/` + `supabase/` matches the master prompt's re
 
 ---
 
-## 12. Local Development Setup
+## 12. Local Development Setup (primary — no hosting required)
 
 1. Clone/copy into `default-project/careerpilot-v3`.
 2. `git init`, copy `.env.example` → `backend/.env` (backend secrets) and → `frontend/.env.local` (public values).
 3. Create Supabase **dev** project (or `supabase start` for local; prefer cloud dev project for parity). Apply migrations from `supabase/migrations` via Supabase CLI.
-4. Backend: `uv sync` in `backend/` → `uv run uvicorn app.main:app --reload --port 8000` (OpenAPI at `http://localhost:8000/docs`).
-5. Frontend: `npm install` at root workspaces → `npm run dev` in `frontend/` → `http://localhost:3000`.
-6. Quality gates: `ruff check`, `pytest`, `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build`.
-7. Trigger ingestion: `POST http://localhost:8000/api/v1/internal/sync` with `x-internal-token`.
+4. Backend: `pip install -r backend/requirements.txt` (or `pip install -e backend/` / `uv sync` in `backend/`) → `uvicorn app.main:app --reload --port 8000` from `backend/` (OpenAPI at `http://localhost:8000/docs`).
+5. Frontend: `npm install` → `npm run dev` in `frontend/` → `http://localhost:3000`.
+6. Quality gates: `ruff check`, `pytest` (backend) and `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build` (frontend).
+7. Trigger ingestion: `POST http://localhost:8000/api/v1/internal/sync` with `x-internal-token` (optional locally).
 8. AI: use real OpenRouter key in dev (cheap models); no local model execution required.
 
-Credentials setup: Supabase (project API keys + JWT secret), OpenRouter key, Resend key (dev), Sentry DSNs (optional), generate own `INTERNAL_SYNC_TOKEN`.
+Credentials setup: Supabase (project API keys + JWT secret), OpenRouter key, Resend key (dev), Sentry DSNs (optional), generate own `INTERNAL_SYNC_TOKEN`. No Railway/Render account required for local development.
 
 ---
 
 ## 13. CI/CD Architecture
 
 - **PR CI (`ci.yml`):** frontend (typecheck → lint → test → build), backend (ruff → pytest), generated-client freshness check. Blocks merge on failure.
-- **Deploy:** Vercel (frontend, GitHub-connected, preview + production) · Railway (backend, GitHub-connected, auto-deploy from `backend/`).
-- **Ingestion schedule (`ingest-schedule.yml`):** cron → `POST {RAILWAY_API_URL}/api/v1/internal/sync` with `INTERNAL_SYNC_TOKEN`.
-- **Sentry source maps:** upload in frontend build via `SENTRY_AUTH_TOKEN` (CI secret).
+- **Deploy (optional, not required for local dev):** Frontend optionally via Vercel (GitHub-connected, preview + production); backend on any suitable Python host (Railway, Render, Fly, etc., auto-deploy from `backend/`). The new maintainer chooses the host.
+- **Ingestion schedule (`ingest-schedule.yml` — optional):** cron → `POST {BACKEND_API_URL}/api/v1/internal/sync` with `INTERNAL_SYNC_TOKEN`. Can also be triggered manually locally.
+- **Sentry source maps:** upload in frontend build via `SENTRY_AUTH_TOKEN` (CI secret) if Sentry is configured.
 - **No secrets in workflows** beyond referenced GitHub secrets.
 
 ---
 
-## 14. Deployment Architecture
+## 14. Deployment Architecture (generic — local-first)
 
-User → Cloudflare (DNS) → Vercel (Next.js) → Railway (FastAPI) → Supabase (Postgres/Auth/Storage). AI: FastAPI → OpenRouter. Email: FastAPI → Resend. Monitoring: both apps → Sentry. Ingest: GitHub Actions cron → FastAPI `/internal/sync` → providers → Supabase.
+Local: User → `localhost:3000` (Next.js) → `localhost:8000` (FastAPI) → Supabase (Postgres/Auth/Storage). AI: FastAPI → OpenRouter. Email: FastAPI → Resend. Monitoring: both apps → Sentry (if configured). Ingest: GitHub Actions cron or manual `POST /internal/sync` → providers → Supabase.
+
+Production (example, maintainer's choice): User → Cloudflare (DNS, optional) → Vercel or any Next.js host (frontend) → any Python host for FastAPI (e.g. Railway, Render, Fly) → Supabase. Other combinations are supported — the architecture is host-agnostic.
 
 ---
 
